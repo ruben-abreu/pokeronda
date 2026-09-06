@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFile,access} from 'node:fs/promises';
+const source=await readFile('dist/client/sw.js','utf8');
+function worker(){
+ const handlers={};const stores=new Map();let online=true;let payload={events:[{id:'one'}],fetchedAt:'2026-09-06T02:00:00Z',stale:false};
+ const caches={async open(name){if(!stores.has(name))stores.set(name,new Map());const items=stores.get(name);return{async addAll(paths){for(const path of paths)items.set(path,new Response(path));},async match(key){return items.get(key)?.clone();},async put(key,response){items.set(key,response.clone());}};},async keys(){return [...stores.keys()];},async delete(name){return stores.delete(name);}};
+ vm.runInNewContext(source,{URL,Response,Date,caches,self:{location:{origin:'https://agenda.test'},clients:{claim:async()=>{}},addEventListener:(name,handler)=>handlers[name]=handler},fetch:async(request)=>{if(!online)throw new Error('offline');if((request.url||request).includes('/api/events'))return Response.json(payload);return new Response('<html>Agenda</html>',{headers:{'content-type':'text/html'}});}});
+ return{stores,caches,async lifecycle(name){let pending;handlers[name]({waitUntil:p=>pending=p});await pending;},async get(path,mode='cors'){let result;handlers.fetch({request:{url:'https://agenda.test'+path,method:'GET',mode},respondWith:p=>result=p});return result&&await result;},offline(){online=false;},payload(value){payload=value;}};
+}
+test('Built precache only references existing files',async()=>{const assets=JSON.parse(source.match(/const ASSETS = (.*);/)[1]);assert.ok(assets.some(p=>p.endsWith('.js')));assert.ok(assets.some(p=>p.endsWith('.css')));for(const path of assets)await access('dist/client'+path);assert.ok(!source.includes('__PWA_'));});
+test('Offline app uses cached navigation and cached feed is always stale',async()=>{const w=worker();await w.lifecycle('install');await w.get('/api/events');w.offline();assert.match(await(await w.get('/','navigate')).text(),/Agenda/);const feed=await(await w.get('/api/events')).json();assert.equal(feed.stale,true);assert.equal(feed.events[0].id,'one');assert.equal(await w.get('/api/calendar/one.ics'),undefined);});
+test('Older fallback does not replace recent events and no cache returns 503',async()=>{const w=worker();await w.get('/api/events');w.payload({events:[],fetchedAt:'2026-09-01T00:00:00Z',stale:true});assert.equal((await(await w.get('/api/events')).json()).events.length,1);const empty=worker();empty.offline();assert.equal((await empty.get('/api/events')).status,503);});
+test('Activation keeps data and other applications caches',async()=>{const w=worker();await w.lifecycle('install');await w.get('/api/events');await w.caches.open('proxima-ronda-old');await w.caches.open('another-app');await w.lifecycle('activate');assert.ok(w.stores.has('another-app'));assert.ok(w.stores.has('proxima-ronda-events-v1'));assert.ok(!w.stores.has('proxima-ronda-old'));});
