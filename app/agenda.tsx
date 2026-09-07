@@ -16,6 +16,9 @@ import {
   Swords,
   Trophy,
   Users,
+  Star,
+  Bookmark,
+  Store,
 } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -63,6 +66,9 @@ import {
   kindsForGame,
   readPreferences,
 } from '@/lib/preferences';
+import { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty } from '@/components/ui/combobox';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { PERSONAL_KEY, readPersonal, shopOptions, shopKey, eventKey, personalFilter, monthOpen, type Personal } from '@/lib/personal';
 import { googleCalendarUrl } from '@/lib/calendar';
 const typeIcons = {
   challenge: Swords,
@@ -114,6 +120,14 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
   const [game, setGame] = useState('all');
   const [kinds, setKinds] = useState<string[]>([]);
   const [district, setDistrict] = useState('all');
+  const [personal,setPersonal]=useState<Personal>(()=>readPersonal(null));
+  const [favoriteView,setFavoriteView]=useState('all');
+  const [mobile,setMobile]=useState(false);
+  const [storageError,setStorageError]=useState(false);
+  const changeDistrict=(value:string)=>{setDistrict(value);setPersonal(p=>({...p,shop:'all'}));};
+  const toggleEvent=(e:Tournament)=>setPersonal(p=>({...p,events:p.events.includes(eventKey(e))?p.events.filter(id=>id!==eventKey(e)):[...p.events,eventKey(e)]}));
+  const toggleShop=(e:Tournament)=>setPersonal(p=>({...p,shops:p.shops.some(shop=>shop.key===shopKey(e))?p.shops.filter(shop=>shop.key!==shopKey(e)):[...p.shops,{key:shopKey(e),name:e.shop,district:e.district,city:e.city}]}));
+  useEffect(()=>{const query=window.matchMedia('(max-width: 850px)');const update=()=>setMobile(query.matches);update();query.addEventListener('change',update);return()=>query.removeEventListener('change',update);},[]);
   const [includeFriendlies, setIncludeFriendlies] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [preferencesReady, setPreferencesReady] = useState(false);
@@ -130,6 +144,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
       raw,
       window.matchMedia('(prefers-color-scheme: dark)').matches,
     );
+    try{setPersonal(readPersonal(localStorage.getItem(PERSONAL_KEY)));}catch{setStorageError(true);}
     setGame(saved.game);
     setKinds(saved.kinds);
     setDistrict(saved.district);
@@ -147,6 +162,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
       );
     } catch {}
   }, [game, kinds, district, theme, preferencesReady]);
+  useEffect(()=>{if(!preferencesReady)return;try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(personal));setStorageError(false);}catch{setStorageError(true);}},[personal,preferencesReady]);
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState(todayPortugal);
   const refreshing = useRef(false);
@@ -200,24 +216,31 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
   );
   const events = useMemo(
     () =>
-      filterEvents(
+      personalFilter(filterEvents(
         feed.events,
         game,
         kinds,
         district,
         today,
         includeFriendlies,
-      ),
-    [feed.events, game, kinds, district, today, includeFriendlies],
+      ), district==='all'?'all':personal.shop, favoriteView, personal),
+    [feed.events, game, kinds, district, today, includeFriendlies, personal, favoriteView],
   );
   const districts = [...new Set(upcoming.map(e => e.district))].sort((a, b) =>
     a.localeCompare(b, 'pt'),
   );
+  const shops=useMemo(()=>shopOptions(upcoming,district),[upcoming,district]);
+  const storeItems=[{key:'all',name:'Todas as lojas',district:'',city:''},...shops];
+  const selectedStore=storeItems.find(s=>s.key===personal.shop)||storeItems[0];
+  useEffect(()=>{if(preferencesReady&&personal.shop!=='all'&&!shops.some(s=>s.key===personal.shop))setPersonal(p=>({...p,shop:'all'}));},[shops,preferencesReady,personal.shop]);
   const groups = events.reduce<Record<string, Tournament[]>>((acc, e) => {
     (acc[e.date.slice(0, 7)] ??= []).push(e);
     return acc;
   }, {});
-  const active =
+  const monthKeys=Object.keys(groups);
+  const isMonthOpen=(month:string)=>monthOpen(month,monthKeys[0],mobile,personal.months);
+  const setAllMonths=(open:boolean)=>setPersonal(p=>({...p,months:{...p.months,...Object.fromEntries(monthKeys.map(month=>[month,open]))}}));
+  const active = personal.shop!=='all'||favoriteView!=='all'||
     includeFriendlies ||
     game !== 'all' ||
     kinds.length > 0 ||
@@ -253,6 +276,8 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               },
             },
             district: { type: 'string' },
+            shop: {type:'string'},
+            favoriteView:{type:'string',enum:['all','saved','shops']},
             includeFriendlies: {
               type: 'boolean',
               description:
@@ -270,11 +295,15 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             game: string;
             kinds: string[];
             district: string;
+            shop?:string;
+            favoriteView?:string;
             includeFriendlies?: boolean;
           };
           if (
             (p.includeFriendlies !== undefined &&
               typeof p.includeFriendlies !== 'boolean') ||
+            (p.favoriteView!==undefined&&!['all','saved','shops'].includes(p.favoriteView))||
+            (p.shop!==undefined&&p.shop!=='all'&&(p.district==='all'||!shopOptions(upcoming,p.district).some(s=>s.key===p.shop)))||
             !['all', 'TCG', 'VGC'].includes(p.game) ||
             !Array.isArray(p.kinds) ||
             p.kinds.some(
@@ -289,17 +318,19 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             setGame(p.game);
             setKinds(selectedKinds);
             setDistrict(p.district);
+            setPersonal(current=>({...current,shop:p.shop||'all'}));
+            setFavoriteView(p.favoriteView||'all');
             setIncludeFriendlies(p.includeFriendlies === true);
           });
           return {
-            events: filterEvents(
+            events: personalFilter(filterEvents(
               feed.events,
               p.game,
               selectedKinds,
               p.district,
               today,
               p.includeFriendlies === true,
-            ),
+            ),p.shop||'all',p.favoriteView||'all',personal),
           };
         },
       },
@@ -321,6 +352,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             district,
             theme,
             includeFriendlies,
+            shop:personal.shop, favoriteView, savedEvents:personal.events, favoriteShops:personal.shops, shops, months:monthKeys.map(month=>({month,open:isMonthOpen(month)})),
             count: events.length,
             availableKinds:
               game === 'VGC'
@@ -341,7 +373,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
       } catch {}
     }
     return () => lifecycle.abort();
-  }, [game, kinds, district, theme, feed, today, includeFriendlies]);
+  }, [game, kinds, district, theme, feed, today, includeFriendlies,personal,favoriteView,mobile]);
   return (
     <div className='app-shell'>
       <header className='topbar'>
@@ -421,7 +453,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               </span>
               <Select
                 value={district}
-                onValueChange={v => setDistrict(v || 'all')}
+                onValueChange={v => changeDistrict(v || 'all')}
               >
                 <SelectTrigger
                   className='district-select'
@@ -441,6 +473,14 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className='shop-filter'>
+              <label className='filter-label' htmlFor='shop-search'>LOJA</label>
+              <Combobox items={storeItems} value={selectedStore} itemToStringLabel={item=>item.name+(item.city&&item.city!==item.district?' · '+item.city:'')} isItemEqualToValue={(a,b)=>a.key===b.key} onValueChange={item=>setPersonal(p=>({...p,shop:item?.key||'all'}))} disabled={district==='all'}>
+                <ComboboxInput id='shop-search' className='shop-search' placeholder={district==='all'?'Escolhe um distrito':'Pesquisar loja…'} disabled={district==='all'} showClear={personal.shop!=='all'}/>
+                <ComboboxContent className='shop-menu'><ComboboxEmpty>Nenhuma loja encontrada.</ComboboxEmpty><ComboboxList>{item=><ComboboxItem key={item.key} value={item}><Store size={15}/><span>{item.name}{item.city&&item.city!==item.district&&<small> · {item.city}</small>}</span></ComboboxItem>}</ComboboxList></ComboboxContent>
+              </Combobox>
+              <span className='shop-filter-hint'>{district==='all'?'Escolhe primeiro um distrito.':`${shops.length} lojas com eventos anunciados`}</span>
             </div>
           </div>
           <div className='filter-bottom'>
@@ -487,6 +527,8 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   setGame('all');
                   setKinds([]);
                   setDistrict('all');
+                  setPersonal(p=>({...p,shop:'all'}));
+                  setFavoriteView('all');
                   setIncludeFriendlies(false);
                 }}
               >
@@ -530,11 +572,21 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             <button onClick={() => void refresh()}>Tentar novamente</button>
           )}
         </div>
+        <div className='personal-toolbar'>
+          <ToggleGroup value={[favoriteView]} onValueChange={value=>setFavoriteView(String(value[0]||'all'))} className='personal-views' aria-label='Mostrar favoritos'>
+            <ToggleGroupItem value='all'>Todos os eventos</ToggleGroupItem>
+            <ToggleGroupItem value='saved'><Bookmark size={16}/>Eventos guardados</ToggleGroupItem>
+            <ToggleGroupItem value='shops'><Star size={16}/>Lojas favoritas</ToggleGroupItem>
+          </ToggleGroup>
+          {storageError&&<p role='status'>O navegador não permitiu guardar as alterações. Os favoritos desta sessão podem perder-se ao fechar.</p>}
+          {favoriteView==='shops'&&personal.shops.length>0&&<div className='favorite-shop-list'>{personal.shops.map(shop=><span key={shop.key}>{shop.name} · {shop.city||shop.district}<button aria-label={`Remover ${shop.name}, ${shop.city||shop.district}, das favoritas`} onClick={()=>setPersonal(p=>({...p,shops:p.shops.filter(s=>s.key!==shop.key)}))}>×</button></span>)}</div>}
+        </div>
         <section className='results' aria-label='Próximos eventos'>
           <div className='results-heading'>
             <h2>
               Próximos eventos <span aria-live='polite'>{events.length}</span>
             </h2>
+            {monthKeys.length>0&&<div className='month-controls'><button onClick={()=>setAllMonths(false)}>Recolher meses</button><button onClick={()=>setAllMonths(true)}>Expandir meses</button></div>}
             <span className='order'>
               <CalendarDays size={15} /> Por ordem de data
             </span>
@@ -544,11 +596,10 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               <EmptyHeader>
                 <CalendarDays size={35} />
                 <EmptyTitle className='empty-title'>
-                  Ainda não há eventos por aqui.
+                  {favoriteView==='saved'?'Sem eventos guardados nesta seleção.':favoriteView==='shops'?'Sem eventos das lojas favoritas nesta seleção.':'Ainda não há eventos por aqui.'}
                 </EmptyTitle>
                 <EmptyDescription>
-                  Não há eventos anunciados para esta seleção. Experimenta outro
-                  jogo, tipo ou distrito.
+                  {favoriteView==='saved'?'Usa o marcador junto ao calendário para guardar eventos.':favoriteView==='shops'?'Usa a estrela junto ao nome de uma loja para a guardar.':'Experimenta outro jogo, tipo, distrito ou loja.'}
                 </EmptyDescription>
               </EmptyHeader>
               {active && (
@@ -558,6 +609,8 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                     setGame('all');
                     setKinds([]);
                     setDistrict('all');
+                  setPersonal(p=>({...p,shop:'all'}));
+                  setFavoriteView('all');
                     setIncludeFriendlies(false);
                   }}
                 >
@@ -567,18 +620,19 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             </Empty>
           ) : (
             Object.entries(groups).map(([month, rows]) => (
-              <div className='month-section' key={month}>
-                <div className='month-heading'>
-                  <h3>
+              <Collapsible className='month-section' key={month} open={isMonthOpen(month)} onOpenChange={open=>setPersonal(p=>({...p,months:{...p.months,[month]:open}}))}>
+                <h3 className='month-title'><CollapsibleTrigger className='month-heading month-toggle'>
+                  <span className='month-label'>
                     {new Intl.DateTimeFormat('pt-PT', {
                       month: 'long',
                       year: 'numeric',
                       timeZone: 'UTC',
-                    }).format(new Date(month + '-15T12:00:00Z'))}
-                  </h3>
-                  <span>{rows.length} eventos</span>
-                  <div />
-                </div>
+                    }).format(new Date(month + '-15T12:00:00Z')).replace(/^./, letter => letter.toLocaleUpperCase('pt-PT'))}
+                  </span>
+                  <span className='month-count'>{rows.length} eventos</span>
+                  <ChevronDown size={18} className={isMonthOpen(month)?'month-chevron open':'month-chevron'}/>
+                </CollapsibleTrigger></h3>
+                <CollapsibleContent>
                 <Table className='events-table'>
                   <TableHeader>
                     <TableRow>
@@ -625,7 +679,8 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                             </span>
                           </TableCell>
                           <TableCell className='shop-cell'>
-                            <strong>
+                            <strong className='shop-name'>
+                              <button className='save-button shop-save' aria-pressed={personal.shops.some(s=>s.key===shopKey(e))} aria-label={`${personal.shops.some(s=>s.key===shopKey(e))?'Remover':'Guardar'} loja ${e.shop}, ${e.city||e.district}, ${e.address}, nas favoritas`} onClick={()=>toggleShop(e)}><Star size={17}/></button>
                               {e.url ? (
                                 <a
                                   className='source-link'
@@ -658,14 +713,15 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                             {e.price || 'N/A'}
                           </TableCell>
                           <TableCell className='action-cell'>
-                            <CalendarButton event={e} />
+                            <div className='row-actions'><button className='save-button event-save' aria-pressed={personal.events.includes(eventKey(e))} aria-label={`${personal.events.includes(eventKey(e))?'Remover dos guardados':'Guardar evento'}: ${e.shop}, ${e.date}`} onClick={()=>toggleEvent(e)}><Bookmark size={17}/></button><CalendarButton event={e} /></div>
                           </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             ))
           )}
         </section>

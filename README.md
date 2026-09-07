@@ -6,6 +6,9 @@ Built as an independent community and portfolio project. The interface is in Eur
 
 ## Features
 
+- **Searchable store filter** scoped to the selected district. Changing district resets the store selection.
+- **Saved events and favorite stores** stored locally in this browser, without accounts. Dedicated views respect the current filters and show upcoming events available in the feed. Clearing browser data removes these favorites; they do not sync across devices.
+- **Collapsible months** with expand/collapse-all actions. On mobile, only the first matching month opens by default. Explicit month choices are remembered locally.
 - **TCG and VGC filters**, with League Challenges, League Cups and prereleases. Prereleases are only available for TCG.
 - **Optional friendlies** through a separate checkbox. They are off on every page load, including after a refresh. “All” never enables them. When enabled, they supplement the selected competitive categories while respecting the game and district filters.
 - **Events grouped by month and ordered by date**, showing the store, district, location, time and admission price. Missing prices appear as `N/A`.
@@ -102,7 +105,8 @@ Feedback stays in the current page until the user opens their email app and expl
 npm run build
 npx tsc --noEmit
 node_modules/.bin/esbuild tests/events.test.ts --bundle --platform=node --format=esm --outfile=/tmp/pokeronda-tests.mjs
-node --test /tmp/pokeronda-tests.mjs tests/pwa.test.mjs
+node_modules/.bin/esbuild tests/personal.test.ts --bundle --platform=node --format=esm --outfile=/tmp/pokeronda-personal-tests.mjs
+node --test /tmp/pokeronda-tests.mjs /tmp/pokeronda-personal-tests.mjs tests/pwa.test.mjs
 ```
 
 Run the build before the service worker tests: they inspect the generated production worker and its asset list. The tests cover filtering, deduplication, admission prices, timezone conversion, ICS formatting, preference restoration, friendlies opt-in and offline fallback behavior.
