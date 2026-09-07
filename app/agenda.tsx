@@ -542,7 +542,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               </span>
             </a>
             <span className='nav-active'>
-              <CalendarDays size={17} /> {t('Agenda de eventos')}
+              <CalendarDays size={17} /> {t('Agenda')}
             </span>
             <div className='header-actions'>
               <PwaControls />
@@ -585,7 +585,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                 <span /> PLAY! POKÉMON · PORTUGAL
               </div>
               <h1>
-                {t('Agenda de Eventos')}
+                {t('Agenda de Torneios')}
                 <span>.</span>
               </h1>
               <p>{t('Escolhe o evento. Prepara a estratégia. Marca o dia.')}</p>
