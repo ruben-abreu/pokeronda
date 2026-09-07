@@ -122,3 +122,5 @@ For hosting in your own Cloudflare account, start at [Workers & Pages](https://d
 PokeRonda is an independent project and is not affiliated with or endorsed by The Pokémon Company or Pokedata. Pokémon names and third-party data remain subject to their respective owners' rights and terms. No license for upstream data is implied by this repository.
 
 For local development without the Cloudflare emulator, run `POKERONDA_NODE_DEV=1 npm run dev`. Production builds continue to use Cloudflare. The PT/EN language choice is saved with the filters; new browsers start with TCG and Lisboa.
+
+Cloudflare Worker name: `app`. The Git integration uses `npx wrangler deploy --name app` and `npx wrangler versions upload --name app` so deployments target the renamed Worker.
