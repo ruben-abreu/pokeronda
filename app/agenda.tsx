@@ -60,6 +60,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { PwaControls } from './pwa-controls';
 import { CommunityLinks } from './community-links';
+import { LanguageContext, translator, useI18n, type Language } from '@/lib/i18n';
 import { Switch } from '@/components/ui/switch';
 import {
   PREFERENCES_KEY,
@@ -77,15 +78,16 @@ const typeIcons = {
   friendly: Users,
 };
 function CalendarButton({ event }: { event: Tournament }) {
+  const {t,language}=useI18n();
   const ics = `/api/calendar/${encodeURIComponent(event.id)}.ics`;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className='calendar-button'
-        aria-label={`Adicionar ${event.shop}, ${event.date}, ao calendário`}
+        aria-label={language==='en'?`Add ${event.shop}, ${event.date}, to calendar`:`Adicionar ${event.shop}, ${event.date}, ao calendário`}
       >
         <CalendarPlus size={17} />
-        <span>Calendário</span>
+        <span>{t("Calendário")}</span>
         <ChevronDown size={14} />
       </DropdownMenuTrigger>
       <DropdownMenuContent className='calendar-menu' align='end'>
@@ -104,12 +106,12 @@ function CalendarButton({ event }: { event: Tournament }) {
           Google Calendar · Android
         </DropdownMenuItem>
         <DropdownMenuItem render={<a href={ics} download />}>
-          Descarregar .ics
+          {t("Descarregar .ics")}
         </DropdownMenuItem>
         <p className='calendar-note'>
           {event.time
-            ? 'Reserva inicial de 1 hora. Confirma a duração e o horário com a loja.'
-            : 'Hora por anunciar. Será guardado como evento de dia inteiro.'}
+            ? t("Reserva inicial de 1 hora. Confirma a duração e o horário com a loja.")
+            : t("Hora por anunciar. Será guardado como evento de dia inteiro.")}
         </p>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -117,9 +119,12 @@ function CalendarButton({ event }: { event: Tournament }) {
 }
 export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
   const [feed, setFeed] = useState(initialFeed);
-  const [game, setGame] = useState('all');
+  const [game, setGame] = useState('TCG');
   const [kinds, setKinds] = useState<string[]>([]);
-  const [district, setDistrict] = useState('all');
+  const [district, setDistrict] = useState('Lisboa');
+  const [language,setLanguage]=useState<Language>('pt');
+  const t=translator(language);
+  const locale=language==='en'?'en-GB':'pt-PT';
   const [personal,setPersonal]=useState<Personal>(()=>readPersonal(null));
   const [favoriteView,setFavoriteView]=useState('all');
   const [mobile,setMobile]=useState(false);
@@ -149,19 +154,22 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     setKinds(saved.kinds);
     setDistrict(saved.district);
     setTheme(saved.theme);
+    setLanguage(saved.language);
     setPreferencesReady(true);
   }, []);
   useEffect(() => {
     if (!preferencesReady) return;
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.style.colorScheme = theme;
+    document.documentElement.lang=locale;
+    document.title=language==='en'?'PokeRonda · Pokémon events in Portugal':'PokeRonda · Eventos Pokémon em Portugal';
     try {
       localStorage.setItem(
         PREFERENCES_KEY,
-        JSON.stringify({ game, kinds, district, theme }),
+        JSON.stringify({ game, kinds, district, theme, language }),
       );
     } catch {}
-  }, [game, kinds, district, theme, preferencesReady]);
+  }, [game, kinds, district, theme, language, locale, preferencesReady]);
   useEffect(()=>{if(!preferencesReady)return;try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(personal));setStorageError(false);}catch{setStorageError(true);}},[personal,preferencesReady]);
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState(todayPortugal);
@@ -230,7 +238,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     a.localeCompare(b, 'pt'),
   );
   const shops=useMemo(()=>shopOptions(upcoming,district),[upcoming,district]);
-  const storeItems=[{key:'all',name:'Todas as lojas',district:'',city:''},...shops];
+  const storeItems=[{key:'all',name:t("Todas as lojas"),district:'',city:''},...shops];
   const selectedStore=storeItems.find(s=>s.key===personal.shop)||storeItems[0];
   useEffect(()=>{if(preferencesReady&&personal.shop!=='all'&&!shops.some(s=>s.key===personal.shop))setPersonal(p=>({...p,shop:'all'}));},[shops,preferencesReady,personal.shop]);
   const groups = events.reduce<Record<string, Tournament[]>>((acc, e) => {
@@ -351,6 +359,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             kinds,
             district,
             theme,
+            language,
             includeFriendlies,
             shop:personal.shop, favoriteView, savedEvents:personal.events, favoriteShops:personal.shops, shops, months:monthKeys.map(month=>({month,open:isMonthOpen(month)})),
             count: events.length,
@@ -373,12 +382,12 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
       } catch {}
     }
     return () => lifecycle.abort();
-  }, [game, kinds, district, theme, feed, today, includeFriendlies,personal,favoriteView,mobile]);
+  }, [game, kinds, district, theme, feed, today, includeFriendlies,personal,favoriteView,mobile,language]);
   return (
-    <div className='app-shell'>
+    <LanguageContext.Provider value={language}><div className='app-shell'>
       <header className='topbar'>
         <div className='topbar-inner'>
-          <a className='brand' href='/' aria-label='PokeRonda, início'>
+          <a className='brand' href='/' aria-label={t("PokeRonda, início")}>
             <span className='brand-icon'>
               <CircleDot size={25} />
             </span>
@@ -388,7 +397,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             </span>
           </a>
           <span className='nav-active'>
-            <CalendarDays size={17} /> Agenda de eventos
+            <CalendarDays size={17} /> {t("Agenda de eventos")}
           </span>
           <div className='header-actions'>
             <PwaControls />
@@ -398,7 +407,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             <label className='theme-control'>
               <Sun size={16} />
               <Switch
-                aria-label='Modo escuro'
+                aria-label={t("Modo escuro")}
                 checked={theme === 'dark'}
                 onCheckedChange={checked =>
                   setTheme(checked ? 'dark' : 'light')
@@ -406,6 +415,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               />
               <Moon size={16} />
             </label>
+            <button className='language-control' type='button' aria-label={language==='pt'?'Switch to English':'Mudar para português'} onClick={()=>setLanguage(current=>current==='pt'?'en':'pt')}><span className={language==='pt'?'selected':''}>PT</span><span className={language==='en'?'selected':''}>EN</span></button>
           </div>
         </div>
       </header>
@@ -416,29 +426,29 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               <span /> PLAY! POKÉMON · PORTUGAL
             </div>
             <h1>
-              O teu próximo evento<span>.</span>
+              {t("O teu próximo evento")}<span>.</span>
             </h1>
-            <p>Escolhe o evento. Prepara a estratégia. Marca o dia.</p>
+            <p>{t("Escolhe o evento. Prepara a estratégia. Marca o dia.")}</p>
           </div>
           <div className='heading-count' aria-live='polite'>
             <span>{events.length.toString().padStart(2, '0')}</span>
             <div>
-              eventos
-              <br />a caminho <ArrowUpRight size={16} />
+              {t("eventos")}
+              <br />{t("a caminho")} <ArrowUpRight size={16} />
             </div>
           </div>
         </div>
-        <section className='filters' aria-label='Filtrar eventos'>
+        <section className='filters' aria-label={t("Filtrar eventos")}>
           <div className='filter-top'>
             <div>
-              <span className='filter-label'>O TEU JOGO</span>
+              <span className='filter-label'>{t("O TEU JOGO")}</span>
               <ToggleGroup
                 value={[game]}
                 onValueChange={v => changeGame(String(v[0] || 'all'))}
                 className='game-options'
-                aria-label='Jogo'
+                aria-label={t("Jogo")}
               >
-                <ToggleGroupItem value='all'>Todos os jogos</ToggleGroupItem>
+                <ToggleGroupItem value='all'>{t("Todos os jogos")}</ToggleGroupItem>
                 <ToggleGroupItem value='TCG'>
                   <GalleryVerticalEnd size={19} /> TCG
                 </ToggleGroupItem>
@@ -449,7 +459,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
             </div>
             <div className='district-filter'>
               <span className='filter-label' id='district-label'>
-                ONDE
+                {t("ONDE")}
               </span>
               <Select
                 value={district}
@@ -461,11 +471,11 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                 >
                   <MapPin size={17} />
                   <SelectValue>
-                    {district === 'all' ? 'Todos os distritos' : district}
+                    {district === 'all' ? t("Todos os distritos") : district}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>Todos os distritos</SelectItem>
+                  <SelectItem value='all'>{t("Todos os distritos")}</SelectItem>
                   {districts.map(d => (
                     <SelectItem key={d} value={d}>
                       {d}
@@ -475,16 +485,16 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               </Select>
             </div>
             <div className='shop-filter'>
-              <label className='filter-label' htmlFor='shop-search'>LOJA</label>
+              <label className='filter-label' htmlFor='shop-search'>{t("LOJA")}</label>
               <Combobox items={storeItems} value={selectedStore} itemToStringLabel={item=>item.name+(item.city&&item.city!==item.district?' · '+item.city:'')} isItemEqualToValue={(a,b)=>a.key===b.key} onValueChange={item=>setPersonal(p=>({...p,shop:item?.key||'all'}))} disabled={district==='all'}>
-                <ComboboxInput id='shop-search' className='shop-search' placeholder={district==='all'?'Escolhe um distrito':'Pesquisar loja…'} disabled={district==='all'} showClear={personal.shop!=='all'}/>
-                <ComboboxContent className='shop-menu'><ComboboxEmpty>Nenhuma loja encontrada.</ComboboxEmpty><ComboboxList>{item=><ComboboxItem key={item.key} value={item}><Store size={15}/><span>{item.name}{item.city&&item.city!==item.district&&<small> · {item.city}</small>}</span></ComboboxItem>}</ComboboxList></ComboboxContent>
+                <ComboboxInput id='shop-search' className='shop-search' placeholder={district==='all'?t("Escolhe um distrito"):t("Pesquisar loja…")} disabled={district==='all'} showClear={personal.shop!=='all'}/>
+                <ComboboxContent className='shop-menu'><ComboboxEmpty>{t("Nenhuma loja encontrada.")}</ComboboxEmpty><ComboboxList>{item=><ComboboxItem key={item.key} value={item}><Store size={15}/><span>{item.name}{item.city&&item.city!==item.district&&<small> · {item.city}</small>}</span></ComboboxItem>}</ComboboxList></ComboboxContent>
               </Combobox>
-              <span className='shop-filter-hint'>{district==='all'?'Escolhe primeiro um distrito.':`${shops.length} lojas com eventos anunciados`}</span>
+              <span className='shop-filter-hint'>{district==='all'?t("Escolhe primeiro um distrito."):`${shops.length} ${language==='en'?'stores with upcoming events':'lojas com eventos anunciados'}`}</span>
             </div>
           </div>
           <div className='filter-bottom'>
-            <span className='filter-label'>TIPO DE EVENTO</span>
+            <span className='filter-label'>{t("TIPO DE EVENTO")}</span>
             <ToggleGroup
               multiple
               value={kinds.length ? kinds : ['all']}
@@ -496,10 +506,10 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                 )
               }
               className='kind-options'
-              aria-label='Tipo de evento'
+              aria-label={t("Tipo de evento")}
             >
               <ToggleGroupItem value='all' className='kind-filter all'>
-                Todos
+                {t("Todos")}
               </ToggleGroupItem>
               {(Object.keys(kindLabels) as EventKind[])
                 .filter(
@@ -515,7 +525,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                       className={`kind-filter ${k}`}
                     >
                       <Icon size={16} />
-                      {kindLabels[k]}
+                      {t(kindLabels[k])}
                     </ToggleGroupItem>
                   );
                 })}
@@ -532,7 +542,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   setIncludeFriendlies(false);
                 }}
               >
-                Limpar filtros
+                {t("Limpar filtros")}
               </button>
             )}
           </div>
@@ -549,10 +559,10 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               />
               <span className='friendly-copy'>
                 <span id='friendly-title' className='friendly-title'>
-                  Incluir friendlies
+                  {t("Incluir friendlies")}
                 </span>
                 <span id='friendly-hint' className='friendly-hint'>
-                  Encontros casuais de liga
+                  {t("Encontros casuais de liga")}
                 </span>
               </span>
             </label>
@@ -565,30 +575,30 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
           <span className='status-dot' />
           <span>
             {loading
-              ? 'A verificar os próximos eventos…'
-              : `${feed.stale ? 'A mostrar a última lista disponível' : 'Verificado'} · ${new Intl.DateTimeFormat('pt-PT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Lisbon' }).format(new Date(feed.fetchedAt))}${feed.stale ? ' · A fonte está temporariamente indisponível.' : ' · Atualização automática'}`}
+              ? t("A verificar os próximos eventos…")
+              : `${feed.stale ? t("A mostrar a última lista disponível") : t("Verificado")} · ${new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Lisbon' }).format(new Date(feed.fetchedAt))}${feed.stale ? t(" · A fonte está temporariamente indisponível.") : t(" · Atualização automática")}`}
           </span>
           {feed.stale && !loading && (
-            <button onClick={() => void refresh()}>Tentar novamente</button>
+            <button onClick={() => void refresh()}>{t("Tentar novamente")}</button>
           )}
         </div>
         <div className='personal-toolbar'>
-          <ToggleGroup value={[favoriteView]} onValueChange={value=>setFavoriteView(String(value[0]||'all'))} className='personal-views' aria-label='Mostrar favoritos'>
-            <ToggleGroupItem value='all'>Todos os eventos</ToggleGroupItem>
-            <ToggleGroupItem value='saved'><Bookmark size={16}/>Eventos guardados</ToggleGroupItem>
-            <ToggleGroupItem value='shops'><Star size={16}/>Lojas favoritas</ToggleGroupItem>
+          <ToggleGroup value={[favoriteView]} onValueChange={value=>setFavoriteView(String(value[0]||'all'))} className='personal-views' aria-label={t("Mostrar favoritos")}>
+            <ToggleGroupItem value='all'>{t("Todos os eventos")}</ToggleGroupItem>
+            <ToggleGroupItem value='saved'><Bookmark size={16}/>{t("Eventos guardados")}</ToggleGroupItem>
+            <ToggleGroupItem value='shops'><Star size={16}/>{t("Lojas favoritas")}</ToggleGroupItem>
           </ToggleGroup>
-          {storageError&&<p role='status'>O navegador não permitiu guardar as alterações. Os favoritos desta sessão podem perder-se ao fechar.</p>}
-          {favoriteView==='shops'&&personal.shops.length>0&&<div className='favorite-shop-list'>{personal.shops.map(shop=><span key={shop.key}>{shop.name} · {shop.city||shop.district}<button aria-label={`Remover ${shop.name}, ${shop.city||shop.district}, das favoritas`} onClick={()=>setPersonal(p=>({...p,shops:p.shops.filter(s=>s.key!==shop.key)}))}>×</button></span>)}</div>}
+          {storageError&&<p role='status'>{t("O navegador não permitiu guardar as alterações. Os favoritos desta sessão podem perder-se ao fechar.")}</p>}
+          {favoriteView==='shops'&&personal.shops.length>0&&<div className='favorite-shop-list'>{personal.shops.map(shop=><span key={shop.key}>{shop.name} · {shop.city||shop.district}<button aria-label={language==='en'?`Remove ${shop.name}, ${shop.city||shop.district}, from favorites`:`Remover ${shop.name}, ${shop.city||shop.district}, das favoritas`} onClick={()=>setPersonal(p=>({...p,shops:p.shops.filter(s=>s.key!==shop.key)}))}>×</button></span>)}</div>}
         </div>
-        <section className='results' aria-label='Próximos eventos'>
+        <section className='results' aria-label={t("Próximos eventos")}>
           <div className='results-heading'>
             <h2>
-              Próximos eventos <span aria-live='polite'>{events.length}</span>
+              {t("Próximos eventos")} <span aria-live='polite'>{events.length}</span>
             </h2>
-            {monthKeys.length>0&&<div className='month-controls'><button onClick={()=>setAllMonths(false)}>Recolher meses</button><button onClick={()=>setAllMonths(true)}>Expandir meses</button></div>}
+            {monthKeys.length>0&&<div className='month-controls'><button onClick={()=>setAllMonths(false)}>{t("Recolher meses")}</button><button onClick={()=>setAllMonths(true)}>{t("Expandir meses")}</button></div>}
             <span className='order'>
-              <CalendarDays size={15} /> Por ordem de data
+              <CalendarDays size={15} /> {t("Por ordem de data")}
             </span>
           </div>
           {events.length === 0 ? (
@@ -596,10 +606,10 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               <EmptyHeader>
                 <CalendarDays size={35} />
                 <EmptyTitle className='empty-title'>
-                  {favoriteView==='saved'?'Sem eventos guardados nesta seleção.':favoriteView==='shops'?'Sem eventos das lojas favoritas nesta seleção.':'Ainda não há eventos por aqui.'}
+                  {favoriteView==='saved'?t("Sem eventos guardados nesta seleção."):favoriteView==='shops'?t("Sem eventos das lojas favoritas nesta seleção."):t("Ainda não há eventos por aqui.")}
                 </EmptyTitle>
                 <EmptyDescription>
-                  {favoriteView==='saved'?'Usa o marcador junto ao calendário para guardar eventos.':favoriteView==='shops'?'Usa a estrela junto ao nome de uma loja para a guardar.':'Experimenta outro jogo, tipo, distrito ou loja.'}
+                  {favoriteView==='saved'?t("Usa o marcador junto ao calendário para guardar eventos."):favoriteView==='shops'?t("Usa a estrela junto ao nome de uma loja para a guardar."):t("Experimenta outro jogo, tipo, distrito ou loja.")}
                 </EmptyDescription>
               </EmptyHeader>
               {active && (
@@ -614,7 +624,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                     setIncludeFriendlies(false);
                   }}
                 >
-                  Ver todos os eventos
+                  {t("Ver todos os eventos")}
                 </button>
               )}
             </Empty>
@@ -623,32 +633,32 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               <Collapsible className='month-section' key={month} open={isMonthOpen(month)} onOpenChange={open=>setPersonal(p=>({...p,months:{...p.months,[month]:open}}))}>
                 <h3 className='month-title'><CollapsibleTrigger className='month-heading month-toggle'>
                   <span className='month-label'>
-                    {new Intl.DateTimeFormat('pt-PT', {
+                    {new Intl.DateTimeFormat(locale, {
                       month: 'long',
                       year: 'numeric',
                       timeZone: 'UTC',
-                    }).format(new Date(month + '-15T12:00:00Z')).replace(/^./, letter => letter.toLocaleUpperCase('pt-PT'))}
+                    }).format(new Date(month + '-15T12:00:00Z')).replace(/^./, letter => letter.toLocaleUpperCase(locale))}
                   </span>
-                  <span className='month-count'>{rows.length} eventos</span>
+                  <span className='month-count'>{rows.length} {language==='en'?(rows.length===1?'event':'events'):(rows.length===1?'evento':'eventos')}</span>
                   <ChevronDown size={18} className={isMonthOpen(month)?'month-chevron open':'month-chevron'}/>
                 </CollapsibleTrigger></h3>
                 <CollapsibleContent>
                 <Table className='events-table'>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>DATA</TableHead>
-                      <TableHead>EVENTO</TableHead>
-                      <TableHead>LOJA</TableHead>
-                      <TableHead>DISTRITO / LOCAL</TableHead>
-                      <TableHead>PREÇO</TableHead>
+                      <TableHead>{t("DATA")}</TableHead>
+                      <TableHead>{t("EVENTO")}</TableHead>
+                      <TableHead>{t("LOJA")}</TableHead>
+                      <TableHead>{t("DISTRITO / LOCAL")}</TableHead>
+                      <TableHead>{t("PREÇO")}</TableHead>
                       <TableHead>
-                        <span className='sr-only'>Adicionar ao calendário</span>
+                        <span className='sr-only'>{t("Adicionar ao calendário")}</span>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map(e => {
-                      const date = dateParts(e.date);
+                      const date = dateParts(e.date,locale);
                       const Icon = typeIcons[e.kind];
                       return (
                         <TableRow key={e.id} className={`event-row ${e.kind}`}>
@@ -659,13 +669,13 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                             </div>
                             <div className='date-time'>
                               <strong>{date.weekday}</strong>
-                              <span>{e.time || 'Hora por anunciar'}</span>
+                              <span>{e.time || t("Hora por anunciar")}</span>
                             </div>
                           </TableCell>
                           <TableCell className='type-cell'>
                             <span className={`type-badge ${e.kind}`}>
                               <Icon size={15} />
-                              {kindLabels[e.kind]}
+                              {t(kindLabels[e.kind])}
                             </span>
                             <span
                               className={`game-meta ${e.game.toLowerCase()}`}
@@ -680,7 +690,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                           </TableCell>
                           <TableCell className='shop-cell'>
                             <strong className='shop-name'>
-                              <button className='save-button shop-save' aria-pressed={personal.shops.some(s=>s.key===shopKey(e))} aria-label={`${personal.shops.some(s=>s.key===shopKey(e))?'Remover':'Guardar'} loja ${e.shop}, ${e.city||e.district}, ${e.address}, nas favoritas`} onClick={()=>toggleShop(e)}><Star size={17}/></button>
+                              <button className='save-button shop-save' aria-pressed={personal.shops.some(s=>s.key===shopKey(e))} aria-label={`${personal.shops.some(s=>s.key===shopKey(e))?t("Remover"):t("Guardar")} ${language==='en'?'store':'loja'} ${e.shop}, ${e.city||e.district}, ${e.address}`} onClick={()=>toggleShop(e)}><Star size={17}/></button>
                               {e.url ? (
                                 <a
                                   className='source-link'
@@ -709,11 +719,11 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                           <TableCell
                             className={`price-cell ${e.price ? '' : 'price-missing'}`}
                           >
-                            <span className='price-label'>Entrada</span>
+                            <span className='price-label'>{t("Entrada")}</span>
                             {e.price || 'N/A'}
                           </TableCell>
                           <TableCell className='action-cell'>
-                            <div className='row-actions'><button className='save-button event-save' aria-pressed={personal.events.includes(eventKey(e))} aria-label={`${personal.events.includes(eventKey(e))?'Remover dos guardados':'Guardar evento'}: ${e.shop}, ${e.date}`} onClick={()=>toggleEvent(e)}><Bookmark size={17}/></button><CalendarButton event={e} /></div>
+                            <div className='row-actions'><button className='save-button event-save' aria-pressed={personal.events.includes(eventKey(e))} aria-label={`${personal.events.includes(eventKey(e))?t("Remover dos guardados"):t("Guardar evento")}: ${e.shop}, ${e.date}`} onClick={()=>toggleEvent(e)}><Bookmark size={17}/></button><CalendarButton event={e} /></div>
                           </TableCell>
                         </TableRow>
                       );
@@ -743,6 +753,6 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
           <CommunityLinks />
         </footer>
       </main>
-    </div>
+    </div></LanguageContext.Provider>
   );
 }

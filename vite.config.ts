@@ -1,4 +1,3 @@
-import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
@@ -13,6 +12,7 @@ const { d1, r2 } = hostingConfig;
 
 
 const localBindingConfig = {
+  name: 'app',
   main: 'vinext/server/fetch-handler',
   compatibility_flags: ['nodejs_compat'],
   d1_databases: d1
@@ -42,18 +42,21 @@ export default defineConfig(async () => {
   process.env.MINIFLARE_REGISTRY_PATH ??= '.wrangler/registry';
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import('@cloudflare/vite-plugin');
+  const localNode = process.env.POKERONDA_NODE_DEV === '1';
+  const hostingPlugins = localNode ? [] : [
+    (await import('@openai/sites-vite-plugin')).sites(),
+    (await import('@cloudflare/vite-plugin')).cloudflare({
+      viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
+      config: localBindingConfig,
+    }),
+  ];
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
     server: { watch: { useFsEvents: false, usePolling: true, interval: 1000, ignored: ['**/node_modules/**', '**/.wrangler/**', '**/dist/**', '**/.git/**', '**/*.tsbuildinfo'] } },
     plugins: [
       vinext(),
-      sites(),
-      cloudflare({
-        viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
-      }),
+      ...hostingPlugins,
     ],
   };
 });

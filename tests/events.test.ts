@@ -23,7 +23,7 @@ test('Lisbon and Lisboa share one district and one combined result set',()=>{
 });
 test('Saved filters restore safely and VGC cannot retain prerelease',async()=>{
  const {readPreferences,kindsForGame}=await import('../lib/preferences.ts');
- const saved={game:'TCG',kinds:['cup'],district:'Lisboa',theme:'dark'};
+ const saved={game:'TCG',kinds:['cup'],district:'Lisboa',theme:'dark',language:'pt'};
  assert.deepEqual(readPreferences(JSON.stringify(saved)),saved);
  assert.deepEqual(readPreferences(JSON.stringify({...saved,game:'VGC',kinds:['prerelease','cup'],district:'Lisbon'})),{...saved,game:'VGC',kinds:['cup']});
  assert.deepEqual(kindsForGame('VGC',['prerelease']),[]);
@@ -40,4 +40,14 @@ test('Friendlies require separate opt-in even with All, while game and district 
  assert.equal(filterEvents(data,'VGC',['cup'],'Porto','2026-09-12',true).length,1);
  assert.equal(filterEvents(data,'VGC',['cup'],'Lisboa','2026-09-12',true).length,0);
  assert.equal(filterEvents(data,'all',['friendly'],'all','2026-09-12').length,0);
+});
+
+
+test('First visit starts with TCG and Lisboa, saved choices and language win',async()=>{
+ const {readPreferences}=await import('../lib/preferences.ts');
+ assert.deepEqual(readPreferences(null),{game:'TCG',kinds:[],district:'Lisboa',theme:'light',language:'pt'});
+ const saved={game:'all',kinds:[],district:'all',theme:'light',language:'en'};
+ assert.deepEqual(readPreferences(JSON.stringify(saved)),saved);
+ assert.equal(readPreferences(JSON.stringify({game:'VGC',district:'Porto'})).game,'VGC');
+ assert.equal(readPreferences(JSON.stringify({game:'VGC',district:'Porto'})).district,'Porto');
 });
