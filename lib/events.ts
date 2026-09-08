@@ -9,12 +9,13 @@ export function normalizePlace(value:string) {
  const key=Object.keys(places).find(k=>k.toLocaleLowerCase('pt')===trimmed.toLocaleLowerCase('pt'));
  return key?places[key]:cleanName(trimmed);
 }
+const euro = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
 export function admissionPrice(value:unknown):string {
  if(typeof value!=='string'&&typeof value!=='number')return '';
  const raw=String(value).trim();
  if(!raw||/^(n\/?a|não indicado|a confirmar|ask staff|tba|tbd|-)$/i.test(raw))return '';
  const numeric=raw.replace(/€|EUR/gi,'').trim();
- if(/^\d+(?:[.,]\d{1,2})?$/.test(numeric))return new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(Number(numeric.replace(',','.')));
+ if(/^\d+(?:[.,]\d{1,2})?$/.test(numeric))return euro.format(Number(numeric.replace(',','.')));
  return raw;
 }
 export function cleanName(s:string) { return s === s.toUpperCase() ? s.toLocaleLowerCase('pt-PT').replace(/(^|[\s(])\p{L}/gu, c=>c.toLocaleUpperCase('pt-PT')).replace(/\b(Tcg|Vgc|Bt|Gg)\b/g,c=>c.toUpperCase()) : s; }

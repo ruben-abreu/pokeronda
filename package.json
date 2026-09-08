@@ -6,11 +6,12 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build && node scripts/build-pwa.mjs",
-    "start": "wrangler dev --config dist/server/wrangler.json",
+    "dev": "node scripts/dev.mjs",
+    "build": "node --experimental-strip-types scripts/prepare-static.mjs && vite build && node scripts/build-pwa.mjs",
+    "start": "wrangler dev --config wrangler.jsonc",
     "lint": "oxlint",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "deploy": "wrangler deploy --config wrangler.jsonc"
   },
   "dependencies": {
     "react": "19.2.6",

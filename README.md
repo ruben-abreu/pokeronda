@@ -2,7 +2,7 @@
 
 A responsive Pokémon event calendar for players in Portugal. PokeRonda brings upcoming TCG and VGC events into one place, with clear filters, admission prices and calendar exports.
 
-Built as an independent community and portfolio project. The interface is in European Portuguese. The app currently runs locally; no public deployment is active.
+Built as an independent community and portfolio project. The interface supports European Portuguese and English. The public app is [app.pokeronda.workers.dev](https://app.pokeronda.workers.dev/).
 
 ## Features
 
@@ -20,7 +20,7 @@ Built as an independent community and portfolio project. The interface is in Eur
 
 ## Tech stack
 
-React 19, TypeScript, Vinext, Vite, Tailwind CSS, shadcn/ui with Base UI primitives, and Lucide icons. The production build targets the Cloudflare Workers runtime. A custom service worker handles offline assets and event responses.
+React 19, TypeScript, Vite, Tailwind CSS, shadcn/ui with Base UI primitives, and Lucide icons. The interface is served as static assets, with no React rendering in the Worker. A small Worker streams cached source pages. The browser validates and normalizes events, generates calendars and saves the last complete list for offline use.
 
 The current app does not require a database, user accounts or an email delivery service.
 
@@ -48,9 +48,9 @@ Use the address printed by Wrangler. `npm run start` runs a local production pre
 
 Events currently come from the endpoint used by [pokedata.ovh](https://www.pokedata.ovh/events/), filtered to Portugal. This is separate from the service at `pokedata.io`.
 
-The browser checks for updates on launch, when the page becomes visible, and every 30 minutes while visible. The server reuses successful responses for six hours per instance/cache. Different instances or cache locations may refresh independently; this is not a globally enforced request limit. Failed refreshes use a short retry delay and preserve the last available data.
+The browser checks for updates on launch, when the page becomes visible, and every 30 minutes while visible. Source pages are cached in six-hour windows per Cloudflare location. Pagination stays within one window. Each Worker invocation streams one page without parsing JSON, sorting events, formatting dates or generating HTML. Failures have a short retry delay.
 
-There is no scheduled synchronization job when the app is not being accessed. During outages, the app uses the last successful response or the bundled fallback snapshot and labels it as stale. The initial snapshot was collected on September 6, 2026 and contains 539 source records, including casual events; visible counts depend on normalization, dates and filters.
+Only complete, validated event lists are saved in the browser. Failed refreshes preserve the last complete list, marked as stale. A build-time snapshot covers first visits during an outage. No scheduled polling runs while nobody is using the app. Older installed PWAs receive the static fallback at `/api/events` until updated.
 
 Normalization excludes cancelled events, merges duplicate official identifiers, unifies district spellings such as Lisbon/Lisboa and formats admission prices where possible. Categories with no announced events remain empty rather than being populated with sample data.
 
@@ -66,7 +66,7 @@ Calendar event identifiers and browser preference keys retain their original int
 
 ## Install as a PWA
 
-The service worker is registered in production only. `npm run build` prepares the offline asset list automatically. After an initial successful online visit, the app can show cached events without an internet connection. Cached fallback data is marked as stale. Refreshing events and opening calendar services still require internet access.
+The service worker is registered in production only. `npm run build` prepares the offline asset list automatically. After an initial successful online visit, the app can show cached events without an internet connection. Cached fallback data is marked as stale. Refreshing events and opening Google Calendar require internet access. ICS downloads are generated locally and also work offline.
 
 On a phone, installation requires an HTTPS URL accessible from that device. A Mac's `localhost` does not refer to the Mac when opened on an iPhone, and an ordinary local-network HTTP address does not enable service workers.
 
@@ -91,36 +91,30 @@ Feedback stays in the current page until the user opens their email app and expl
 | `app/agenda.tsx` | Event list, filters, preferences and calendar actions |
 | `app/community-links.tsx` | Support link and feedback dialog |
 | `app/pwa-controls.tsx` | Installation guidance and connectivity status |
-| `app/api/` | Event feed and calendar download routes |
+| `worker/index.ts` | Streaming source-page proxy and cache |
+| `app/main.tsx`, `index.html` | Static app entry and metadata |
 | `lib/events.ts` | Data normalization and filtering |
-| `lib/feed.ts` | Upstream requests, caching and fallback behavior |
+| `lib/browser-feed.ts` | Pagination, validation and offline list storage |
 | `lib/calendar.ts` | Timezone conversion and calendar export generation |
 | `public/sw.js` | Service worker template |
 | `scripts/build-pwa.mjs` | Production offline asset preparation |
 | `tests/` | Event, calendar, preference and service worker checks |
 
-## Validation
+## Build and deployment
 
 ```sh
 npm run build
-npx tsc --noEmit
-node_modules/.bin/esbuild tests/events.test.ts --bundle --platform=node --format=esm --outfile=/tmp/pokeronda-tests.mjs
-node_modules/.bin/esbuild tests/personal.test.ts --bundle --platform=node --format=esm --outfile=/tmp/pokeronda-personal-tests.mjs
-node --test /tmp/pokeronda-tests.mjs /tmp/pokeronda-personal-tests.mjs tests/pwa.test.mjs
+npm run deploy
 ```
 
-Run the build before the service worker tests: they inspect the generated production worker and its asset list. The tests cover filtering, deduplication, admission prices, timezone conversion, ICS formatting, preference restoration, friendlies opt-in and offline fallback behavior.
+`wrangler.jsonc` targets the existing Worker **app**. Existing Git build commands remain `npm run build` and `npx wrangler deploy --name app`; preview versions use `npx wrangler versions upload --name app`. No database, KV namespace, paid plan or new secret is required.
 
-## Deployment status
+Only `/api/*` invokes the Worker. The home page, scripts, CSS, fonts and icons are served directly as static assets. `scripts/prepare-static.mjs` prepares the fallback and legacy calendar files once at build time. Deploy `dist/client` with the root Wrangler configuration, never an old `dist/server` SSR build. The original `app/page.tsx`, `app/layout.tsx`, `app/api/`, `lib/feed.ts` and historical `.openai/hosting.json` remain for reference but are not part of the active build.
 
-The current build uses Cloudflare tooling with a Sites integration. `.openai/hosting.json` identifies an unpublished Sites reservation; it is not a public deployment or a deployment configuration for another Cloudflare account.
-
-For hosting in your own Cloudflare account, start at [Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages). Cloudflare supports [GitHub-based builds and deployments](https://developers.cloudflare.com/workers/ci-cd/builds/). The existing Sites-specific configuration must be reviewed and adapted before connecting this checkout to an independent deployment. Runtime CPU usage and upstream connectivity also need validation on the chosen plan.
+After deployment, reload the page; installed PWAs may need all previous windows closed before the new service worker activates. Review invocation status and CPU metrics for the new version, including uncached `/api/source-events` calls. Local build success does not establish a production CPU duration. The static home page avoids Worker invocation; the API still has Cloudflare's normal limits and depends on the upstream service.
 
 ## Project scope
 
 PokeRonda is an independent project and is not affiliated with or endorsed by The Pokémon Company or Pokedata. Pokémon names and third-party data remain subject to their respective owners' rights and terms. No license for upstream data is implied by this repository.
 
-For local development without the Cloudflare emulator, run `POKERONDA_NODE_DEV=1 npm run dev`. Production builds continue to use Cloudflare. The PT/EN language choice is saved with the filters; new browsers start with TCG and Lisboa.
-
-Cloudflare Worker name: `app`. The Git integration uses `npx wrangler deploy --name app` and `npx wrangler versions upload --name app` so deployments target the renamed Worker.
+The PT/EN language choice is saved with the filters; new browsers start with TCG and Lisboa.

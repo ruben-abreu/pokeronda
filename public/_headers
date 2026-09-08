@@ -1,0 +1,11 @@
+/
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/calendars/*
+  Content-Type: text/calendar; charset=utf-8
+  Content-Disposition: attachment
+/data/fallback.json
+  Cache-Control: no-cache

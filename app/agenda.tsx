@@ -95,7 +95,8 @@ import {
   monthOpen,
   type Personal,
 } from '@/lib/personal';
-import { googleCalendarUrl } from '@/lib/calendar';
+import { googleCalendarUrl, calendarFile } from '@/lib/calendar';
+import { loadBrowserFeed } from '@/lib/browser-feed';
 const typeIcons = {
   challenge: Swords,
   cup: Trophy,
@@ -104,7 +105,16 @@ const typeIcons = {
 };
 function CalendarButton({ event }: { event: Tournament }) {
   const { t, language } = useI18n();
-  const ics = `/api/calendar/${encodeURIComponent(event.id)}.ics`;
+  function downloadCalendar() {
+    const url = URL.createObjectURL(new Blob([calendarFile(event)], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pokeronda-${event.date}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -120,7 +130,7 @@ function CalendarButton({ event }: { event: Tournament }) {
         <ChevronDown size={14} />
       </DropdownMenuTrigger>
       <DropdownMenuContent className='calendar-menu' align='end'>
-        <DropdownMenuItem render={<a href={ics} />}>
+        <DropdownMenuItem onClick={downloadCalendar}>
           Apple Calendar · iPhone
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -134,7 +144,7 @@ function CalendarButton({ event }: { event: Tournament }) {
         >
           Google Calendar · Android
         </DropdownMenuItem>
-        <DropdownMenuItem render={<a href={ics} download />}>
+        <DropdownMenuItem onClick={downloadCalendar}>
           {t('Descarregar .ics')}
         </DropdownMenuItem>
         <p className='calendar-note'>
@@ -254,14 +264,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     refreshing.current = true;
     setLoading(true);
     try {
-      const response = await fetch('/api/events', { cache: 'no-store' });
-      if (!response.ok) throw new Error();
-      const next = (await response.json()) as Feed;
-      if (
-        !Array.isArray(next.events) ||
-        !Number.isFinite(Date.parse(next.fetchedAt))
-      )
-        throw new Error();
+      const next = await loadBrowserFeed();
       setFeed(previous =>
         next.stale &&
         Date.parse(previous.fetchedAt) > Date.parse(next.fetchedAt)

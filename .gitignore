@@ -8,3 +8,7 @@
 .DS_Store
 .env*
 *.sync-tmp
+
+# Generated from the tracked source snapshot before dev/build.
+/public/data/fallback.json
+/public/calendars/

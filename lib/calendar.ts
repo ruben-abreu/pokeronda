@@ -1,6 +1,7 @@
-import { kindLabels, type Tournament } from './events';
+import { kindLabels, type Tournament } from './events.ts';
 function escapeICS(value:string){return value.replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,');}
-function fold(line:string){const chunks:string[]=[];let part='';let bytes=0;for(const char of line){const size=new TextEncoder().encode(char).length;if(bytes+size>75){chunks.push(part);part=' ';bytes=1;}part+=char;bytes+=size;}chunks.push(part);return chunks.join('\r\n');}
+const encoder = new TextEncoder();
+function fold(line:string){const chunks:string[]=[];let part='';let bytes=0;for(const char of line){const size=encoder.encode(char).length;if(bytes+size>75){chunks.push(part);part=' ';bytes=1;}part+=char;bytes+=size;}chunks.push(part);return chunks.join('\r\n');}
 export function startUTC(event:Tournament):Date {
  const local=`${event.date}T${event.time||'00:00'}:00`;
  const target=Date.parse(local+'Z');let value=target;
