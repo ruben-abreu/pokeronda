@@ -1,4 +1,4 @@
-import type { Tournament } from './events';
+import { matchesDistrict, type Tournament } from './events';
 import aliases from './shop-aliases.json';
 export const PERSONAL_KEY = 'pokeronda.personal.v1';
 export type FavoriteShop = {key:string;name:string;district:string;city:string};
@@ -17,9 +17,9 @@ export function shopKey(e:Pick<Tournament,'shop'|'district'|'city'|'address'>){r
 function migrateShopKey(key:string){return identities.get(key)?.key||key;}
 
 export function eventKey(e:Pick<Tournament,'url'|'id'>){return e.url||e.id;}
-export function shopOptions(events:Tournament[],district:string):FavoriteShop[]{
+export function shopOptions(events:Tournament[],district:string|readonly string[]):FavoriteShop[]{
  const shops=new Map<string,FavoriteShop>();
- for(const e of events)if(district==='all'||e.district===district){const key=shopKey(e);if(!shops.has(key))shops.set(key,{key,name:shopIdentity(e).name,district:e.district,city:e.city});}
+ for(const e of events)if(matchesDistrict(e.district,district)){const key=shopKey(e);if(!shops.has(key))shops.set(key,{key,name:shopIdentity(e).name,district:e.district,city:e.city});}
  return [...shops.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt')||a.city.localeCompare(b.city,'pt'));
 }
 export function readPersonal(raw:string|null):Personal{

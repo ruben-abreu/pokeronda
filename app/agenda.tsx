@@ -162,7 +162,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
   const [feed, setFeed] = useState(initialFeed);
   const [game, setGame] = useState('TCG');
   const [kinds, setKinds] = useState<string[]>([]);
-  const [district, setDistrict] = useState('Lisboa');
+  const [district, setDistrict] = useState<string[]>(['Lisboa']);
   const [language, setLanguage] = useState<Language>('pt');
   const t = translator(language);
   const locale = language === 'en' ? 'en-GB' : 'pt-PT';
@@ -170,8 +170,8 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
   const [favoriteView, setFavoriteView] = useState('all');
   const [mobile, setMobile] = useState(false);
   const [storageError, setStorageError] = useState(false);
-  const changeDistrict = (value: string) => {
-    setDistrict(value);
+  const changeDistrict = (value: string[]) => {
+    setDistrict(value.includes('all') ? (district.length === 0 ? value.filter(d => d !== 'all') : []) : value);
     setPersonal(p => ({ ...p, shop: 'all' }));
   };
   const toggleEvent = (e: Tournament) =>
@@ -226,7 +226,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     }
     setGame(saved.game);
     setKinds(saved.kinds);
-    setDistrict(saved.district);
+    setDistrict(saved.districts);
     setTheme(saved.theme);
     setLanguage(saved.language);
     setPreferencesReady(true);
@@ -243,7 +243,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     try {
       localStorage.setItem(
         PREFERENCES_KEY,
-        JSON.stringify({ game, kinds, district, theme, language }),
+        JSON.stringify({ game, kinds, district: district.length === 1 ? district[0] : 'all', districts: district, theme, language }),
       );
     } catch {}
   }, [game, kinds, district, theme, language, locale, preferencesReady]);
@@ -311,7 +311,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
           today,
           includeFriendlies,
         ),
-        district === 'all' ? 'all' : personal.shop,
+        district.length === 0 ? 'all' : personal.shop,
         favoriteView,
         personal,
       ),
@@ -326,7 +326,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
       favoriteView,
     ],
   );
-  const districts = [...new Set(upcoming.map(e => e.district))].sort((a, b) =>
+  const districts = [...new Set([...upcoming.map(e => e.district), ...district])].sort((a, b) =>
     a.localeCompare(b, 'pt'),
   );
   const shops = useMemo(
@@ -368,7 +368,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
     includeFriendlies ||
     game !== 'all' ||
     kinds.length > 0 ||
-    district !== 'all';
+    district.length > 0;
   useEffect(() => {
     const context = (
       document as Document & {
@@ -399,7 +399,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                 enum: ['challenge', 'cup', 'prerelease'],
               },
             },
-            district: { type: 'string' },
+            district: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, uniqueItems: true }], description: 'One district, an array of districts, or all / [] for every district.' },
             shop: { type: 'string' },
             favoriteView: { type: 'string', enum: ['all', 'saved', 'shops'] },
             includeFriendlies: {
@@ -418,11 +418,13 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
           const p = input as {
             game: string;
             kinds: string[];
-            district: string;
+            district: string | string[];
             shop?: string;
             favoriteView?: string;
             includeFriendlies?: boolean;
           };
+          const selectedDistricts = typeof p.district === 'string' ? (p.district === 'all' ? [] : [p.district]) : p.district;
+          if (!Array.isArray(selectedDistricts) || selectedDistricts.some(d => typeof d !== 'string' || !districts.includes(d))) throw new Error('Filtros inválidos');
           if (
             (p.includeFriendlies !== undefined &&
               typeof p.includeFriendlies !== 'boolean') ||
@@ -430,24 +432,22 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
               !['all', 'saved', 'shops'].includes(p.favoriteView)) ||
             (p.shop !== undefined &&
               p.shop !== 'all' &&
-              (p.district === 'all' ||
-                !shopOptions(upcoming, p.district).some(
+              (selectedDistricts.length === 0 ||
+                !shopOptions(upcoming, selectedDistricts).some(
                   s => s.key === p.shop,
                 ))) ||
             !['all', 'TCG', 'VGC'].includes(p.game) ||
             !Array.isArray(p.kinds) ||
             p.kinds.some(
               k => !['challenge', 'cup', 'prerelease'].includes(k),
-            ) ||
-            typeof p.district !== 'string' ||
-            (p.district !== 'all' && !districts.includes(p.district))
+            )
           )
             throw new Error('Filtros inválidos');
           const selectedKinds = kindsForGame(p.game, p.kinds);
           flushSync(() => {
             setGame(p.game);
             setKinds(selectedKinds);
-            setDistrict(p.district);
+            setDistrict([...new Set(selectedDistricts)]);
             setPersonal(current => ({ ...current, shop: p.shop || 'all' }));
             setFavoriteView(p.favoriteView || 'all');
             setIncludeFriendlies(p.includeFriendlies === true);
@@ -628,16 +628,18 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   {t('ONDE')}
                 </span>
                 <Select
-                  value={district}
-                  onValueChange={v => changeDistrict(v || 'all')}
+                  multiple
+                  value={district.length ? district : ['all']}
+                  onValueChange={changeDistrict}
                 >
                   <SelectTrigger
                     className='district-select'
+                    title={district.join(', ') || t('Todos os distritos')}
                     aria-labelledby='district-label'
                   >
                     <MapPin size={17} />
                     <SelectValue>
-                      {district === 'all' ? t('Todos os distritos') : district}
+                      {district.length === 0 ? t('Todos os distritos') : district.length === 1 ? district[0] : `${district.length} ${language === 'en' ? 'districts' : 'distritos'}`}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -669,17 +671,17 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   onValueChange={item =>
                     setPersonal(p => ({ ...p, shop: item?.key || 'all' }))
                   }
-                  disabled={district === 'all'}
+                  disabled={district.length === 0}
                 >
                   <ComboboxInput
                     id='shop-search'
                     className='shop-search'
                     placeholder={
-                      district === 'all'
+                      district.length === 0
                         ? t('Escolhe um distrito')
                         : t('Pesquisar loja…')
                     }
-                    disabled={district === 'all'}
+                    disabled={district.length === 0}
                     showClear={personal.shop !== 'all'}
                   />
                   <ComboboxContent className='shop-menu'>
@@ -702,7 +704,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   </ComboboxContent>
                 </Combobox>
                 <span className='shop-filter-hint'>
-                  {district === 'all'
+                  {district.length === 0
                     ? t('Escolhe primeiro um distrito.')
                     : `${shops.length} ${language === 'en' ? 'stores with upcoming events' : 'lojas com eventos anunciados'}`}
                 </span>
@@ -752,7 +754,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                   onClick={() => {
                     setGame('all');
                     setKinds([]);
-                    setDistrict('all');
+                    setDistrict([]);
                     setPersonal(p => ({ ...p, shop: 'all' }));
                     setFavoriteView('all');
                     setIncludeFriendlies(false);
@@ -902,7 +904,7 @@ export default function Agenda({ initialFeed }: { initialFeed: Feed }) {
                     onClick={() => {
                       setGame('all');
                       setKinds([]);
-                      setDistrict('all');
+                      setDistrict([]);
                       setPersonal(p => ({ ...p, shop: 'all' }));
                       setFavoriteView('all');
                       setIncludeFriendlies(false);
