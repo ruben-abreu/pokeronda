@@ -22,8 +22,8 @@ export function readPreferences(
   const defaults: Preferences = {
     game: 'TCG',
     kinds: [],
-    district: 'all',
-    districts: [],
+    district: 'Lisboa',
+    districts: [normalizePlace('Lisboa'), normalizePlace('Setúbal')],
     theme: systemDark ? 'dark' : 'light',
     language: 'pt',
   };
